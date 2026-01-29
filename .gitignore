@@ -1,0 +1,16 @@
+# Build outputs
+obj/
+*.bin
+*.map
+
+# Temporary files
+*.tmp
+*~
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+*.code-workspace
+
