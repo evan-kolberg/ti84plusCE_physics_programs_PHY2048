@@ -12,6 +12,7 @@
  *   Del         - Clear selected cell (or backspace in edit mode)
  *   Clear       - Cancel edit / Exit program
  *   Mode        - Reset all values
+ *   Trace       - Show legend/help
  *   Graph       - Show full-screen trajectory plot
  */
 
@@ -19,16 +20,10 @@
 #include <graphx.h>
 #include <keypadc.h>
 #include <ti/real.h>
-#include <sys/power.h>
-#include <sys/timers.h>
-#include <time.h>
 #include <string.h>
 #include <math.h>
 
 #define GRAVITY 9.81f
-#define INACTIVITY_TIMEOUT (5 * 60)
-
-clock_t lastActivityTime;
 #define PI 3.14159265f
 #define DEG_TO_RAD (PI / 180.0f)
 #define RAD_TO_DEG (180.0f / PI)
@@ -381,52 +376,13 @@ void autoSolve() {
     }
 }
 
-void drawBattery() {
-    int x = 295, y = 2, w = 20, h = 10;
-    uint8_t level = boot_GetBatteryStatus();
-
-    gfx_SetColor(0);
-    gfx_Rectangle(x, y, w, h);
-    gfx_FillRectangle(x + w, y + 3, 2, 4);
-
-    int fillW = (level * (w - 2)) / 4;
-    if (level <= 1) gfx_SetColor(224);
-    else if (level <= 2) gfx_SetColor(231);
-    else gfx_SetColor(7);
-
-    if (fillW > 0) gfx_FillRectangle(x + 1, y + 1, fillW, h - 2);
-}
-
-void drawTimer() {
-    clock_t now = clock();
-    int elapsed = (now - lastActivityTime) / CLOCKS_PER_SEC;
-    int remaining = INACTIVITY_TIMEOUT - elapsed;
-    if (remaining < 0) remaining = 0;
-
-    int mins = remaining / 60;
-    int secs = remaining % 60;
-
-    char buf[10];
-    buf[0] = '0' + mins;
-    buf[1] = ':';
-    buf[2] = '0' + (secs / 10);
-    buf[3] = '0' + (secs % 10);
-    buf[4] = '\0';
-
-    gfx_SetTextFGColor(remaining <= 30 ? 224 : 0);
-    gfx_PrintStringXY(buf, 5, 3);
-}
-
 void drawTable() {
     gfx_FillScreen(255);
-
-    drawBattery();
-    drawTimer();
 
     gfx_SetTextFGColor(0);
     gfx_SetTextScale(1, 1);
     gfx_PrintStringXY("PROJECTILE MOTION", 95, 3);
-    
+
     int startX = 5;
     int startY = 16;
     int colW = 68;
@@ -551,10 +507,10 @@ void drawTable() {
         gfx_PrintStringXY(extraUnits[i], boxX + boxW + 3, y + 3);
     }
     
-    int bottomY = startY + rowH + ROWS * rowH + 6;
-    
     gfx_SetTextFGColor(0);
-    
+
+    int mhY = extraStartY + 3 * extraRowH;
+    gfx_PrintStringXY("Max Height:", rightColX, mhY + 3);
     if (yKnown[2] && yKnown[4]) {
         float v0y = yVals[2];
         float ay = yVals[4];
@@ -567,19 +523,24 @@ void drawTable() {
             maxH = y0;
         }
         char buf[20];
-        gfx_PrintStringXY("MH:", 168, extraStartY + 3 * extraRowH + 2);
         floatToStr(maxH, buf);
-        gfx_PrintStringXY(buf, 192, extraStartY + 3 * extraRowH + 2);
-        gfx_PrintStringXY("m", 260, extraStartY + 3 * extraRowH + 2);
+        gfx_PrintStringXY(buf, rightColX + 80, mhY + 3);
+        gfx_PrintStringXY("m", rightColX + 80 + strlen(buf) * 8, mhY + 3);
+    } else {
+        gfx_PrintStringXY("?", rightColX + 90, mhY + 3);
     }
+
+    int toaY = extraStartY + 4 * extraRowH;
+    gfx_PrintStringXY("Time in Air:", rightColX, toaY + 3);
     if (xKnown[6]) {
         char buf[20];
-        gfx_PrintStringXY("ToF:", 168, extraStartY + 4 * extraRowH + 2);
         floatToStr(xVals[6], buf);
-        gfx_PrintStringXY(buf, 200, extraStartY + 4 * extraRowH + 2);
-        gfx_PrintStringXY("s", 260, extraStartY + 4 * extraRowH + 2);
+        gfx_PrintStringXY(buf, rightColX + 80, toaY + 3);
+        gfx_PrintStringXY("s", rightColX + 80 + strlen(buf) * 8, toaY + 3);
+    } else {
+        gfx_PrintStringXY("?", rightColX + 90, toaY + 3);
     }
-    
+
     gfx_SetTextFGColor(24);
     char allEqs[256] = "";
     if (xEqUsed[0]) strcpy(allEqs, xEqUsed);
@@ -604,9 +565,13 @@ void drawTable() {
         }
     }
 
-    int eqY = bottomY;
+    int eqY = startY + rowH + ROWS * rowH + 8;
+    if (allEqs[0]) {
+        gfx_PrintStringXY("Equations used:", 5, eqY);
+        eqY += 10;
+    }
     char* tok = allEqs;
-    while (*tok) {
+    while (*tok && eqY < 220) {
         char* end = strchr(tok, '|');
         char eq[64];
         if (end) {
@@ -621,18 +586,15 @@ void drawTable() {
         gfx_PrintStringXY(eq, 5, eqY);
         eqY += 10;
     }
-    
-    gfx_SetTextFGColor(160);
-    gfx_PrintStringXY("Built: " __DATE__ " " __TIME__, 5, 230);
-    
-    int miniX = 165;
-    int miniY = 108;
-    int miniW = 150;
-    int miniH = 60;
-    
+
+    int miniX = 168;
+    int miniY = 105;
+    int miniW = 147;
+    int miniH = 120;
+
     gfx_SetColor(200);
     gfx_Rectangle(miniX, miniY, miniW, miniH);
-    
+
     if (xKnown[2] && yKnown[2] && xKnown[6] && xVals[6] > 0) {
         float totalTime = xVals[6];
         float x0 = xKnown[0] ? xVals[0] : 0;
@@ -655,11 +617,11 @@ void drawTable() {
         minPy -= rangeY * 0.1f; maxPy += rangeY * 0.1f;
         rangeX = maxPx - minPx;
         rangeY = maxPy - minPy;
-        
+
         gfx_SetColor(24);
         int lastSx = -1, lastSy = -1;
-        for (int i = 0; i <= 30; i++) {
-            float tt = (i / 30.0f) * totalTime;
+        for (int i = 0; i <= 50; i++) {
+            float tt = (i / 50.0f) * totalTime;
             float px = x0 + xVals[2] * tt + 0.5f * xVals[4] * tt * tt;
             float py = y0 + yVals[2] * tt + 0.5f * yVals[4] * tt * tt;
             int sx = miniX + 5 + (int)(((px - minPx) / rangeX) * (miniW - 10));
@@ -670,17 +632,36 @@ void drawTable() {
         gfx_SetColor(224);
         int startSx = miniX + 5 + (int)(((x0 - minPx) / rangeX) * (miniW - 10));
         int startSy = miniY + miniH - 5 - (int)(((y0 - minPy) / rangeY) * (miniH - 10));
-        gfx_FillCircle(startSx, startSy, 2);
+        gfx_FillCircle(startSx, startSy, 3);
     }
-    
-    gfx_SetTextFGColor(0);
-    gfx_PrintStringXY("p0\\pf: init\\final pos (m)", 140, 172);
-    gfx_PrintStringXY("v0\\vf: init\\final vel (m/s)", 140, 181);
-    gfx_PrintStringXY("a: acceleration (m/s^2)", 140, 190);
-    gfx_PrintStringXY("d: displacement (m)", 140, 199);
-    gfx_PrintStringXY("MH: maximum height (m)", 140, 208);
-    gfx_PrintStringXY("ToF: time of flight (s)", 140, 217);
+
+    gfx_SetTextFGColor(160);
+    gfx_PrintStringXY("Built: " __DATE__ " " __TIME__, 5, 230);
+    gfx_PrintStringXY("[legend]", 200, 230);
     gfx_PrintStringXY("[graph]", 265, 230);
+}
+
+void drawLegend() {
+    gfx_FillScreen(255);
+    gfx_SetTextFGColor(0);
+    gfx_SetTextScale(1, 1);
+
+    gfx_PrintStringXY("LEGEND", 130, 20);
+
+    gfx_PrintStringXY("p0 \\ pf: initial \\ final position (m)", 40, 50);
+    gfx_PrintStringXY("v0 \\ vf: initial \\ final velocity (m/s)", 40, 65);
+    gfx_PrintStringXY("a: acceleration (m/s^2)", 40, 80);
+    gfx_PrintStringXY("d: displacement (m)", 40, 95);
+    gfx_PrintStringXY("t: time (s)", 40, 110);
+    gfx_PrintStringXY("ang: launch angle (degrees)", 40, 125);
+
+    gfx_SetTextFGColor(24);
+    gfx_PrintStringXY("Any key to return", 105, 220);
+
+    gfx_BlitBuffer();
+
+    while (!kb_AnyKey()) kb_Scan();
+    while (kb_AnyKey()) kb_Scan();
 }
 
 void drawGraph() {
@@ -768,7 +749,7 @@ void drawGraph() {
     gfx_FillCircle(startSx, startSy, 4);
     
     gfx_SetTextFGColor(0);
-    gfx_PrintStringXY("Any key to return", 110, 225);
+    gfx_PrintStringXY("Any key to return", 105, 225);
     
     gfx_BlitBuffer();
     
@@ -867,12 +848,11 @@ int main(void) {
     gfx_SetDrawBuffer();
 
     initData();
-    lastActivityTime = clock();
 
     bool running = true;
     bool prevUp = false, prevDown = false, prevLeft = false, prevRight = false;
     bool prevEnter = false, prevClear = false, prevDel = false;
-    bool prevMode = false, prevGraph = false;
+    bool prevMode = false, prevGraph = false, prevTrace = false;
     bool prevKeys[10] = {false};
     bool prevNeg = false, prevDot = false;
 
@@ -891,6 +871,7 @@ int main(void) {
         bool del = kb_Data[1] & kb_Del;
         bool mode = kb_Data[1] & kb_Mode;
         bool graph = kb_Data[1] & kb_Graph;
+        bool trace = kb_Data[1] & kb_Trace;
 
         bool keys[10];
         keys[0] = kb_Data[3] & kb_0;
@@ -906,14 +887,6 @@ int main(void) {
         bool neg = kb_Data[5] & kb_Chs;
         bool dot = kb_Data[4] & kb_DecPnt;
 
-        if (kb_AnyKey()) lastActivityTime = clock();
-
-        clock_t now = clock();
-        if ((now - lastActivityTime) / CLOCKS_PER_SEC >= INACTIVITY_TIMEOUT) {
-            running = false;
-            continue;
-        }
-        
         if (!inputMode) {
             if (up && !prevUp) {
                 if (curRow >= ROWS) {
@@ -956,6 +929,7 @@ int main(void) {
             if (del && !prevDel) clearCell();
             if (mode && !prevMode) resetAll();
             if (graph && !prevGraph) drawGraph();
+            if (trace && !prevTrace) drawLegend();
             if (clear && !prevClear) running = false;
             
             for (int i = 0; i <= 9; i++) {
@@ -1004,11 +978,52 @@ int main(void) {
             
             if (enter && !prevEnter) finishInput();
             if (clear && !prevClear) cancelInput();
+
+            if (up && !prevUp) {
+                finishInput();
+                if (curRow >= ROWS) {
+                    if (curRow == ROWS) curRow = ROWS + 2;
+                    else curRow--;
+                } else {
+                    curRow = (curRow - 1 + ROWS) % ROWS;
+                }
+            }
+            if (down && !prevDown) {
+                finishInput();
+                if (curRow >= ROWS) {
+                    if (curRow == ROWS + 2) curRow = ROWS;
+                    else curRow++;
+                } else {
+                    curRow = (curRow + 1) % ROWS;
+                }
+            }
+            if (left && !prevLeft) {
+                finishInput();
+                if (curRow >= ROWS) {
+                    curRow = curRow - ROWS;
+                    curCol = 1;
+                } else if (curRow < 3 && curCol == 0) {
+                    curRow = ROWS + curRow;
+                } else {
+                    curCol = (curCol - 1 + COLS) % COLS;
+                }
+            }
+            if (right && !prevRight) {
+                finishInput();
+                if (curRow < 3 && curCol == 1) {
+                    curRow = ROWS + curRow;
+                } else if (curRow >= ROWS) {
+                    curRow = curRow - ROWS;
+                    curCol = 0;
+                } else {
+                    curCol = (curCol + 1) % COLS;
+                }
+            }
         }
         
         prevUp = up; prevDown = down; prevLeft = left; prevRight = right;
         prevEnter = enter; prevClear = clear; prevDel = del;
-        prevMode = mode; prevGraph = graph;
+        prevMode = mode; prevGraph = graph; prevTrace = trace;
         for (int i = 0; i <= 9; i++) prevKeys[i] = keys[i];
         prevNeg = neg; prevDot = dot;
     }
