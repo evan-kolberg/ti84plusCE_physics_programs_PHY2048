@@ -1,21 +1,3 @@
-/*
- * Projectile Motion Solver for TI-84 Plus CE
- *
- * A kinematic equation solver for 2D projectile motion problems.
- * Supports solving for position, velocity, acceleration, displacement, and time
- * in both X and Y components, with automatic equation selection and visualization.
- *
- * Controls:
- *   Arrow Keys  - Navigate between cells
- *   Enter       - Begin editing selected cell
- *   0-9, ., (-) - Enter numeric values
- *   Del         - Clear selected cell (or backspace in edit mode)
- *   Clear       - Cancel edit / Exit program
- *   Mode        - Reset all values
- *   Trace       - Show legend/help
- *   Graph       - Show full-screen trajectory plot
- */
-
 #include <tice.h>
 #include <graphx.h>
 #include <keypadc.h>
@@ -381,7 +363,7 @@ void drawTable() {
 
     gfx_SetTextFGColor(0);
     gfx_SetTextScale(1, 1);
-    gfx_PrintStringXY("PROJECTILE MOTION", 95, 3);
+    gfx_PrintStringXY("PROJECTILE MOTION - Evan Kolberg", 45, 3);
 
     int startX = 5;
     int startY = 16;
@@ -611,12 +593,28 @@ void drawTable() {
         }
         float rangeX = maxPx - minPx;
         float rangeY = maxPy - minPy;
-        if (rangeX < 1) rangeX = 1;
-        if (rangeY < 1) rangeY = 1;
+        if (rangeX < 0.1f) rangeX = 0.1f;
+        if (rangeY < 0.1f) rangeY = 0.1f;
         minPx -= rangeX * 0.1f; maxPx += rangeX * 0.1f;
         minPy -= rangeY * 0.1f; maxPy += rangeY * 0.1f;
         rangeX = maxPx - minPx;
         rangeY = maxPy - minPy;
+
+        float scaleX = rangeX / (miniW - 10);
+        float scaleY = rangeY / (miniH - 10);
+        if (scaleX > scaleY) {
+            float newRangeY = scaleX * (miniH - 10);
+            float centerY = (minPy + maxPy) / 2;
+            minPy = centerY - newRangeY / 2;
+            maxPy = centerY + newRangeY / 2;
+            rangeY = newRangeY;
+        } else {
+            float newRangeX = scaleY * (miniW - 10);
+            float centerX = (minPx + maxPx) / 2;
+            minPx = centerX - newRangeX / 2;
+            maxPx = centerX + newRangeX / 2;
+            rangeX = newRangeX;
+        }
 
         gfx_SetColor(24);
         int lastSx = -1, lastSy = -1;
@@ -646,17 +644,23 @@ void drawLegend() {
     gfx_SetTextFGColor(0);
     gfx_SetTextScale(1, 1);
 
-    gfx_PrintStringXY("LEGEND", 130, 20);
+    gfx_PrintStringXY("Legend", 137, 5);
 
-    gfx_PrintStringXY("p0 \\ pf: initial \\ final position (m)", 40, 50);
-    gfx_PrintStringXY("v0 \\ vf: initial \\ final velocity (m/s)", 40, 65);
-    gfx_PrintStringXY("a: acceleration (m/s^2)", 40, 80);
-    gfx_PrintStringXY("d: displacement (m)", 40, 95);
-    gfx_PrintStringXY("t: time (s)", 40, 110);
-    gfx_PrintStringXY("ang: launch angle (degrees)", 40, 125);
+    gfx_PrintStringXY("p0: initial position (meters)", 40, 30);
+    gfx_PrintStringXY("pf: final position (meters)", 40, 45);
+    gfx_PrintStringXY("v0: initial velocity (meters/sec)", 40, 60);
+    gfx_PrintStringXY("vf: final velocity (meters/sec)", 40, 75);
+    gfx_PrintStringXY("a: acceleration (meters/sec^2)", 40, 90);
+    gfx_PrintStringXY("d: displacement (meters)", 40, 105);
+    gfx_PrintStringXY("ang: launch angle (degrees)", 40, 120);
+    gfx_PrintStringXY("t: time (seconds)", 40, 135);
+    gfx_PrintStringXY("mode/quit button: reset all cells", 40, 150);
+    gfx_PrintStringXY("del/ins button: clear cell", 40, 165);
+    gfx_PrintStringXY("clear button: cancel / quit program", 40, 180);
+    gfx_PrintStringXY("graph button: enlarge graph", 40, 195);
 
     gfx_SetTextFGColor(24);
-    gfx_PrintStringXY("Any key to return", 105, 220);
+    gfx_PrintStringXY("Any key to return", 101, 225);
 
     gfx_BlitBuffer();
 
@@ -689,9 +693,9 @@ void drawGraph() {
     
     float rangeX = maxX - minX;
     float rangeY = maxY - minY;
-    if (rangeX < 1) rangeX = 1;
-    if (rangeY < 1) rangeY = 1;
-    
+    if (rangeX < 0.1f) rangeX = 0.1f;
+    if (rangeY < 0.1f) rangeY = 0.1f;
+
     float margin = 0.1f;
     minX -= rangeX * margin;
     maxX += rangeX * margin;
@@ -699,12 +703,29 @@ void drawGraph() {
     maxY += rangeY * margin;
     rangeX = maxX - minX;
     rangeY = maxY - minY;
-    
+
     int graphX = 30;
     int graphY = 15;
     int graphW = 280;
     int graphH = 190;
-    
+
+    float scaleX = rangeX / graphW;
+    float scaleY = rangeY / graphH;
+
+    if (scaleX > scaleY) {
+        float newRangeY = scaleX * graphH;
+        float centerY = (minY + maxY) / 2;
+        minY = centerY - newRangeY / 2;
+        maxY = centerY + newRangeY / 2;
+        rangeY = newRangeY;
+    } else {
+        float newRangeX = scaleY * graphW;
+        float centerX = (minX + maxX) / 2;
+        minX = centerX - newRangeX / 2;
+        maxX = centerX + newRangeX / 2;
+        rangeX = newRangeX;
+    }
+
     gfx_SetColor(200);
     gfx_Rectangle(graphX, graphY, graphW, graphH);
     
@@ -749,7 +770,7 @@ void drawGraph() {
     gfx_FillCircle(startSx, startSy, 4);
     
     gfx_SetTextFGColor(0);
-    gfx_PrintStringXY("Any key to return", 105, 225);
+    gfx_PrintStringXY("Any key to return", 101, 225);
     
     gfx_BlitBuffer();
     
