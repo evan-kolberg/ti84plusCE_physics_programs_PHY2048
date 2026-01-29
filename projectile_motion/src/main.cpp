@@ -19,10 +19,16 @@
 #include <graphx.h>
 #include <keypadc.h>
 #include <ti/real.h>
+#include <sys/power.h>
+#include <sys/timers.h>
+#include <time.h>
 #include <string.h>
 #include <math.h>
 
 #define GRAVITY 9.81f
+#define INACTIVITY_TIMEOUT (5 * 60)
+
+clock_t lastActivityTime;
 #define PI 3.14159265f
 #define DEG_TO_RAD (PI / 180.0f)
 #define RAD_TO_DEG (180.0f / PI)
@@ -31,7 +37,6 @@
 #define ROWS 7
 #define COLS 2
 
-/* Kinematic variables: p0, pf, v0, vf, a, d, t for X and Y components */
 float xVals[VAR_COUNT];
 float yVals[VAR_COUNT];
 bool xKnown[VAR_COUNT];
@@ -39,7 +44,6 @@ bool yKnown[VAR_COUNT];
 bool xUserSet[VAR_COUNT];
 bool yUserSet[VAR_COUNT];
 
-/* Launch parameters (magnitude and angle form) */
 float launchSpeed = 0;
 float launchAngle = 0;
 float finalSpeed = 0;
@@ -50,7 +54,6 @@ bool speedUserSet = false;
 bool angleUserSet = false;
 bool finalSpeedUserSet = false;
 
-/* Cursor and input state */
 int curRow = 0;
 int curCol = 0;
 char inputBuf[12];
@@ -61,7 +64,6 @@ bool isNegative = false;
 
 const char* rowLabels[VAR_COUNT] = {"p0", "pf", "v0", "vf", "a", "d", "t"};
 
-/* Equation tracking for display */
 char xEqUsed[64] = "";
 char yEqUsed[64] = "";
 
@@ -379,9 +381,48 @@ void autoSolve() {
     }
 }
 
+void drawBattery() {
+    int x = 295, y = 2, w = 20, h = 10;
+    uint8_t level = boot_GetBatteryStatus();
+
+    gfx_SetColor(0);
+    gfx_Rectangle(x, y, w, h);
+    gfx_FillRectangle(x + w, y + 3, 2, 4);
+
+    int fillW = (level * (w - 2)) / 4;
+    if (level <= 1) gfx_SetColor(224);
+    else if (level <= 2) gfx_SetColor(231);
+    else gfx_SetColor(7);
+
+    if (fillW > 0) gfx_FillRectangle(x + 1, y + 1, fillW, h - 2);
+}
+
+void drawTimer() {
+    clock_t now = clock();
+    int elapsed = (now - lastActivityTime) / CLOCKS_PER_SEC;
+    int remaining = INACTIVITY_TIMEOUT - elapsed;
+    if (remaining < 0) remaining = 0;
+
+    int mins = remaining / 60;
+    int secs = remaining % 60;
+
+    char buf[10];
+    buf[0] = '0' + mins;
+    buf[1] = ':';
+    buf[2] = '0' + (secs / 10);
+    buf[3] = '0' + (secs % 10);
+    buf[4] = '\0';
+
+    gfx_SetTextFGColor(remaining <= 30 ? 224 : 0);
+    gfx_PrintStringXY(buf, 5, 3);
+}
+
 void drawTable() {
     gfx_FillScreen(255);
-    
+
+    drawBattery();
+    drawTimer();
+
     gfx_SetTextFGColor(0);
     gfx_SetTextScale(1, 1);
     gfx_PrintStringXY("PROJECTILE MOTION", 95, 3);
@@ -518,15 +559,18 @@ void drawTable() {
         float v0y = yVals[2];
         float ay = yVals[4];
         float y0 = yKnown[0] ? yVals[0] : 0;
-        if (ay != 0 && v0y > 0) {
+        float maxH;
+        if (ay < 0 && v0y > 0) {
             float tMax = -v0y / ay;
-            float maxH = y0 + v0y * tMax + 0.5f * ay * tMax * tMax;
-            char buf[20];
-            gfx_PrintStringXY("MH:", 168, extraStartY + 3 * extraRowH + 2);
-            floatToStr(maxH, buf);
-            gfx_PrintStringXY(buf, 192, extraStartY + 3 * extraRowH + 2);
-            gfx_PrintStringXY("m", 260, extraStartY + 3 * extraRowH + 2);
+            maxH = y0 + v0y * tMax + 0.5f * ay * tMax * tMax;
+        } else {
+            maxH = y0;
         }
+        char buf[20];
+        gfx_PrintStringXY("MH:", 168, extraStartY + 3 * extraRowH + 2);
+        floatToStr(maxH, buf);
+        gfx_PrintStringXY(buf, 192, extraStartY + 3 * extraRowH + 2);
+        gfx_PrintStringXY("m", 260, extraStartY + 3 * extraRowH + 2);
     }
     if (xKnown[6]) {
         char buf[20];
@@ -581,10 +625,10 @@ void drawTable() {
     gfx_SetTextFGColor(160);
     gfx_PrintStringXY("Built: " __DATE__ " " __TIME__, 5, 230);
     
-    int miniX = 170;
-    int miniY = 105;
-    int miniW = 140;
-    int miniH = 55;
+    int miniX = 165;
+    int miniY = 108;
+    int miniW = 150;
+    int miniH = 60;
     
     gfx_SetColor(200);
     gfx_Rectangle(miniX, miniY, miniW, miniH);
@@ -629,13 +673,13 @@ void drawTable() {
         gfx_FillCircle(startSx, startSy, 2);
     }
     
-    gfx_SetTextFGColor(128);
-    gfx_PrintStringXY("p0\\pf: init\\final pos (m)", miniX - 27, miniY + miniH + 12);
-    gfx_PrintStringXY("v0\\vf: init\\final vel (m/s)", miniX - 27, miniY + miniH + 21);
-    gfx_PrintStringXY("a: acceleration (m/s^2)", miniX - 27, miniY + miniH + 30);
-    gfx_PrintStringXY("d: displacement (m)", miniX - 27, miniY + miniH + 39);
-    gfx_PrintStringXY("MH: maximum height (m)", miniX - 27, miniY + miniH + 48);
-    gfx_PrintStringXY("ToF: time of flight (s)", miniX - 27, miniY + miniH + 57);
+    gfx_SetTextFGColor(0);
+    gfx_PrintStringXY("p0\\pf: init\\final pos (m)", 140, 172);
+    gfx_PrintStringXY("v0\\vf: init\\final vel (m/s)", 140, 181);
+    gfx_PrintStringXY("a: acceleration (m/s^2)", 140, 190);
+    gfx_PrintStringXY("d: displacement (m)", 140, 199);
+    gfx_PrintStringXY("MH: maximum height (m)", 140, 208);
+    gfx_PrintStringXY("ToF: time of flight (s)", 140, 217);
     gfx_PrintStringXY("[graph]", 265, 230);
 }
 
@@ -821,9 +865,10 @@ void resetAll() {
 int main(void) {
     gfx_Begin();
     gfx_SetDrawBuffer();
-    
+
     initData();
-    
+    lastActivityTime = clock();
+
     bool running = true;
     bool prevUp = false, prevDown = false, prevLeft = false, prevRight = false;
     bool prevEnter = false, prevClear = false, prevDel = false;
@@ -834,9 +879,9 @@ int main(void) {
     while (running) {
         drawTable();
         gfx_BlitBuffer();
-        
+
         kb_Scan();
-        
+
         bool up = kb_Data[7] & kb_Up;
         bool down = kb_Data[7] & kb_Down;
         bool left = kb_Data[7] & kb_Left;
@@ -846,7 +891,7 @@ int main(void) {
         bool del = kb_Data[1] & kb_Del;
         bool mode = kb_Data[1] & kb_Mode;
         bool graph = kb_Data[1] & kb_Graph;
-        
+
         bool keys[10];
         keys[0] = kb_Data[3] & kb_0;
         keys[1] = kb_Data[3] & kb_1;
@@ -860,6 +905,14 @@ int main(void) {
         keys[9] = kb_Data[5] & kb_9;
         bool neg = kb_Data[5] & kb_Chs;
         bool dot = kb_Data[4] & kb_DecPnt;
+
+        if (kb_AnyKey()) lastActivityTime = clock();
+
+        clock_t now = clock();
+        if ((now - lastActivityTime) / CLOCKS_PER_SEC >= INACTIVITY_TIMEOUT) {
+            running = false;
+            continue;
+        }
         
         if (!inputMode) {
             if (up && !prevUp) {
