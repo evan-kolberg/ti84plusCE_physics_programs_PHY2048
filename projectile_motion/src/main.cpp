@@ -44,8 +44,8 @@ bool isNegative = false;
 
 const char* rowLabels[VAR_COUNT] = {"p0", "pf", "v0", "vf", "a", "d", "t"};
 
-char xEqUsed[32] = "";
-char yEqUsed[32] = "";
+char xEqUsed[64] = "";
+char yEqUsed[64] = "";
 
 void floatToStr(float val, char* out) {
     real_t r = os_FloatToReal(val);
@@ -88,55 +88,64 @@ void initData() {
     finalSpeedUserSet = false;
 }
 
+void addEq(char* eqUsed, const char* eq) {
+    if (strstr(eqUsed, eq) != NULL) return;
+    if (eqUsed[0] == '\0') {
+        strcpy(eqUsed, eq);
+    } else if (strlen(eqUsed) + strlen(eq) + 2 < 60) {
+        strcat(eqUsed, " ");
+        strcat(eqUsed, eq);
+    }
+}
+
 void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
     float p0 = vals[0], pf = vals[1], v0 = vals[2], vf = vals[3], a = vals[4], d = vals[5], t = vals[6];
     bool kp0 = known[0], kpf = known[1], kv0 = known[2], kvf = known[3], ka = known[4], kd = known[5], kt = known[6];
-    eqUsed[0] = '\0';
     
     for (int iter = 0; iter < 20; iter++) {
         if (!kd && kp0 && kpf) {
             d = pf - p0;
             kd = true;
-            strcpy(eqUsed, "d=pf-p0");
+            addEq(eqUsed, "d=pf-p0");
         }
         if (!kpf && kp0 && kd) {
             pf = p0 + d;
             kpf = true;
-            strcpy(eqUsed, "pf=p0+d");
+            addEq(eqUsed, "pf=p0+d");
         }
         if (!kp0 && kpf && kd) {
             p0 = pf - d;
             kp0 = true;
-            strcpy(eqUsed, "p0=pf-d");
+            addEq(eqUsed, "p0=pf-d");
         }
         if (!kt && kv0 && kvf && ka && a != 0) {
             t = (vf - v0) / a;
-            if (t >= 0) { kt = true; strcpy(eqUsed, "t=(vf-v0)/a"); }
+            if (t >= 0) { kt = true; addEq(eqUsed, "t=(vf-v0)/a"); }
         }
         if (!kvf && kv0 && ka && kt) {
             vf = v0 + a * t;
             kvf = true;
-            strcpy(eqUsed, "vf=v0+at");
+            addEq(eqUsed, "vf=v0+at");
         }
         if (!kv0 && kvf && ka && kt) {
             v0 = vf - a * t;
             kv0 = true;
-            strcpy(eqUsed, "v0=vf-at");
+            addEq(eqUsed, "v0=vf-at");
         }
         if (!ka && kv0 && kvf && kt && t != 0) {
             a = (vf - v0) / t;
             ka = true;
-            strcpy(eqUsed, "a=(vf-v0)/t");
+            addEq(eqUsed, "a=(vf-v0)/t");
         }
         if (!kd && kv0 && kt && ka) {
             d = v0 * t + 0.5f * a * t * t;
             kd = true;
-            strcpy(eqUsed, "d=v0t+.5at2");
+            addEq(eqUsed, "d=v0t+.5at^2");
         }
         if (!kd && kv0 && kvf && kt) {
             d = (v0 + vf) * 0.5f * t;
             kd = true;
-            strcpy(eqUsed, "d=(v0+vf)t/2");
+            addEq(eqUsed, "d=(v0+vf)t/2");
         }
         if (!kt && kv0 && kd && ka) {
             if (a != 0) {
@@ -153,11 +162,11 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                         t = tMin;
                         kt = true;
                     }
-                    if (kt) strcpy(eqUsed, "t:quadratic");
+                    if (kt) addEq(eqUsed, "d=v0t+.5at^2");
                 }
             } else if (v0 != 0) {
                 t = d / v0;
-                if (t >= 0) { kt = true; strcpy(eqUsed, "t=d/v0"); }
+                if (t >= 0) { kt = true; addEq(eqUsed, "t=d/v0"); }
             }
         }
         if (!kvf && kv0 && ka && kd) {
@@ -167,7 +176,7 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                 if (v0 != 0) vf = (v0 > 0) ? vfMag : -vfMag;
                 else vf = (a * d >= 0) ? vfMag : -vfMag;
                 kvf = true;
-                strcpy(eqUsed, "vf2=v02+2ad");
+                addEq(eqUsed, "vf^2=v0^2+2ad");
             }
         }
         if (!kv0 && kvf && ka && kd) {
@@ -177,25 +186,24 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                 if (vf != 0) v0 = (vf > 0) ? v0Mag : -v0Mag;
                 else v0 = (a * d <= 0) ? v0Mag : -v0Mag;
                 kv0 = true;
-                strcpy(eqUsed, "v02=vf2-2ad");
+                addEq(eqUsed, "v0^2=vf^2-2ad");
             }
         }
         if (!ka && kv0 && kvf && kd && d != 0) {
             a = (vf * vf - v0 * v0) / (2 * d);
             ka = true;
-            strcpy(eqUsed, "a=(vf2-v02)/2d");
+            addEq(eqUsed, "a=(vf^2-v0^2)/2d");
         }
         if (!kd && kv0 && kvf && ka && a != 0) {
             d = (vf * vf - v0 * v0) / (2 * a);
             kd = true;
-            strcpy(eqUsed, "d=(vf2-v02)/2a");
+            addEq(eqUsed, "d=(vf^2-v0^2)/2a");
         }
     }
     
     vals[0] = p0; vals[1] = pf; vals[2] = v0; vals[3] = vf; vals[4] = a; vals[5] = d; vals[6] = t;
     
     for (int i = 0; i < VAR_COUNT; i++) {
-        bool wasKnown = known[i];
         bool nowKnown = false;
         switch(i) {
             case 0: nowKnown = kp0; break;
@@ -211,6 +219,9 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
 }
 
 void autoSolve() {
+    xEqUsed[0] = '\0';
+    yEqUsed[0] = '\0';
+    
     for (int i = 0; i < VAR_COUNT; i++) {
         if (!xUserSet[i]) xKnown[i] = false;
         if (!yUserSet[i]) yKnown[i] = false;
@@ -358,7 +369,7 @@ void drawTable() {
     int boxW = 60;
     int rightColX = 168;
     
-    const char* extraLabels[3] = {"Vi:", "Ang:", "Vf:"};
+    const char* extraLabels[3] = {"v0:", "ang:", "vf:"};
     const char* extraUnits[3] = {"m/s", "deg", "m/s"};
     float extraVals[3] = {launchSpeed, launchAngle, finalSpeed};
     bool extraKnown[3] = {speedKnown, angleKnown, finalSpeedKnown};
@@ -424,9 +435,9 @@ void drawTable() {
             float tMax = -v0y / ay;
             float maxH = y0 + v0y * tMax + 0.5f * ay * tMax * tMax;
             char buf[20];
-            gfx_PrintStringXY("MaxH:", 168, extraStartY + 3 * extraRowH + 2);
+            gfx_PrintStringXY("MH:", 168, extraStartY + 3 * extraRowH + 2);
             floatToStr(maxH, buf);
-            gfx_PrintStringXY(buf, 200, extraStartY + 3 * extraRowH + 2);
+            gfx_PrintStringXY(buf, 192, extraStartY + 3 * extraRowH + 2);
             gfx_PrintStringXY("m", 260, extraStartY + 3 * extraRowH + 2);
         }
     }
@@ -438,22 +449,55 @@ void drawTable() {
         gfx_PrintStringXY("s", 260, extraStartY + 4 * extraRowH + 2);
     }
     
-    if (xEqUsed[0] || yEqUsed[0]) {
-        gfx_PrintStringXY("Eq:", 5, bottomY);
-        if (xEqUsed[0]) {
-            gfx_PrintStringXY("X:", 28, bottomY);
-            gfx_PrintStringXY(xEqUsed, 42, bottomY);
-        }
-        if (yEqUsed[0]) {
-            gfx_PrintStringXY("Y:", 28, bottomY + 10);
-            gfx_PrintStringXY(yEqUsed, 42, bottomY + 10);
+    gfx_SetTextFGColor(24);
+    char allEqs[128] = "";
+    if (xEqUsed[0]) strcpy(allEqs, xEqUsed);
+    if (yEqUsed[0]) {
+        char* tok = yEqUsed;
+        while (*tok) {
+            char* end = strchr(tok, ' ');
+            char eq[32];
+            if (end) {
+                int len = end - tok;
+                strncpy(eq, tok, len);
+                eq[len] = '\0';
+                tok = end + 1;
+            } else {
+                strcpy(eq, tok);
+                tok += strlen(tok);
+            }
+            if (strstr(allEqs, eq) == NULL) {
+                if (allEqs[0]) strcat(allEqs, " ");
+                strcat(allEqs, eq);
+            }
         }
     }
     
-    int miniX = 200;
-    int miniY = bottomY + 5;
-    int miniW = 110;
-    int miniH = 50;
+    int eqY = bottomY;
+    char* tok = allEqs;
+    while (*tok) {
+        char* end = strchr(tok, ' ');
+        char eq[32];
+        if (end) {
+            int len = end - tok;
+            strncpy(eq, tok, len);
+            eq[len] = '\0';
+            tok = end + 1;
+        } else {
+            strcpy(eq, tok);
+            tok += strlen(tok);
+        }
+        gfx_PrintStringXY(eq, 5, eqY);
+        eqY += 10;
+    }
+    
+    gfx_SetTextFGColor(160);
+    gfx_PrintStringXY("Built:" __DATE__ " " __TIME__, 5, 230);
+    
+    int miniX = 185;
+    int miniY = 105;
+    int miniW = 125;
+    int miniH = 55;
     
     gfx_SetColor(200);
     gfx_Rectangle(miniX, miniY, miniW, miniH);
@@ -497,6 +541,16 @@ void drawTable() {
         int startSy = miniY + miniH - 5 - (int)(((y0 - minPy) / rangeY) * (miniH - 10));
         gfx_FillCircle(startSx, startSy, 2);
     }
+    
+    gfx_SetTextFGColor(128);
+    gfx_PrintStringXY("p0: init pos", miniX, miniY + miniH + 3);
+    gfx_PrintStringXY("pf: final pos", miniX, miniY + miniH + 12);
+    gfx_PrintStringXY("v0: init vel", miniX, miniY + miniH + 21);
+    gfx_PrintStringXY("vf: final vel", miniX, miniY + miniH + 30);
+    gfx_PrintStringXY("a: accel   d:disp", miniX, miniY + miniH + 39);
+    gfx_PrintStringXY("t: time    MH: max ht", miniX, miniY + miniH + 48);
+    gfx_PrintStringXY("ToF: time of flight", miniX, miniY + miniH + 57);
+    gfx_PrintStringXY("[graph]", 265, 230);
 }
 
 void drawGraph() {
@@ -584,7 +638,7 @@ void drawGraph() {
     gfx_FillCircle(startSx, startSy, 4);
     
     gfx_SetTextFGColor(0);
-    gfx_PrintStringXY("Any key to return", 90, 225);
+    gfx_PrintStringXY("Any key to return", 100, 225);
     
     gfx_BlitBuffer();
     
@@ -690,9 +744,7 @@ int main(void) {
     bool prevMode = false, prevGraph = false;
     bool prevKeys[10] = {false};
     bool prevNeg = false, prevDot = false;
-    
-    int totalRows = ROWS + EXTRA_ROWS;
-    
+
     while (running) {
         drawTable();
         gfx_BlitBuffer();
