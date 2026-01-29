@@ -67,9 +67,6 @@ void initData() {
     xVals[0] = 0;
     xKnown[0] = true;
     xUserSet[0] = true;
-    yVals[0] = 0;
-    yKnown[0] = true;
-    yUserSet[0] = true;
     xVals[4] = 0;
     xKnown[4] = true;
     xUserSet[4] = true;
@@ -122,6 +119,16 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
             t = (vf - v0) / a;
             if (t >= 0) { kt = true; addEq(eqUsed, "t = (vf - v0) / a"); }
         }
+        if (!kvf && kv0 && ka && a == 0) {
+            vf = v0;
+            kvf = true;
+            addEq(eqUsed, "vf = v0 (a=0)");
+        }
+        if (!kv0 && kvf && ka && a == 0) {
+            v0 = vf;
+            kv0 = true;
+            addEq(eqUsed, "v0 = vf (a=0)");
+        }
         if (!kvf && kv0 && ka && kt) {
             vf = v0 + a * t;
             kvf = true;
@@ -142,10 +149,72 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
             kd = true;
             addEq(eqUsed, "d = v0*t + .5*a*t^2");
         }
+        if (!kv0 && kd && kt && ka && t != 0) {
+            v0 = (d - 0.5f * a * t * t) / t;
+            kv0 = true;
+            addEq(eqUsed, "v0 = (d - .5*a*t^2) / t");
+        }
+        if (!ka && kv0 && kd && kt && t != 0) {
+            a = 2 * (d - v0 * t) / (t * t);
+            ka = true;
+            addEq(eqUsed, "a = 2(d - v0*t) / t^2");
+        }
         if (!kd && kv0 && kvf && kt) {
             d = (v0 + vf) * 0.5f * t;
             kd = true;
             addEq(eqUsed, "d = (v0 + vf) * t / 2");
+        }
+        if (!kt && kv0 && kvf && kd && (v0 + vf) != 0) {
+            t = 2 * d / (v0 + vf);
+            if (t >= 0) { kt = true; addEq(eqUsed, "t = 2*d / (v0 + vf)"); }
+        }
+        if (!kv0 && kvf && kd && kt && t != 0) {
+            v0 = 2 * d / t - vf;
+            kv0 = true;
+            addEq(eqUsed, "v0 = 2*d / t - vf");
+        }
+        if (!kvf && kv0 && kd && kt && t != 0) {
+            vf = 2 * d / t - v0;
+            kvf = true;
+            addEq(eqUsed, "vf = 2*d / t - v0");
+        }
+
+        if (!kd && kvf && kt && ka) {
+            d = vf * t - 0.5f * a * t * t;
+            kd = true;
+            addEq(eqUsed, "d = vf*t - .5*a*t^2");
+        }
+        if (!kvf && kd && kt && ka && t != 0) {
+            vf = (d + 0.5f * a * t * t) / t;
+            kvf = true;
+            addEq(eqUsed, "vf = (d + .5*a*t^2) / t");
+        }
+        if (!ka && kvf && kd && kt && t != 0) {
+            a = 2 * (vf * t - d) / (t * t);
+            ka = true;
+            addEq(eqUsed, "a = 2(vf*t - d) / t^2");
+        }
+        if (!kt && kvf && kd && ka) {
+            if (a != 0) {
+                float disc = vf * vf - 2 * a * d;
+                if (disc >= 0) {
+                    float t1 = (vf - sqrtf(disc)) / a;
+                    float t2 = (vf + sqrtf(disc)) / a;
+                    float tMax = (t1 > t2) ? t1 : t2;
+                    float tMin = (t1 < t2) ? t1 : t2;
+                    if (tMax > 0.001f) {
+                        t = tMax;
+                        kt = true;
+                    } else if (tMin >= 0) {
+                        t = tMin;
+                        kt = true;
+                    }
+                    if (kt) addEq(eqUsed, "d = vf*t - .5*a*t^2");
+                }
+            } else if (vf != 0) {
+                t = d / vf;
+                if (t >= 0) { kt = true; addEq(eqUsed, "t = d / vf"); }
+            }
         }
         if (!kt && kv0 && kd && ka) {
             if (a != 0) {
