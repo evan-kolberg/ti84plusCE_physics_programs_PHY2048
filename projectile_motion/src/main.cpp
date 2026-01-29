@@ -93,7 +93,7 @@ void addEq(char* eqUsed, const char* eq) {
     if (eqUsed[0] == '\0') {
         strcpy(eqUsed, eq);
     } else if (strlen(eqUsed) + strlen(eq) + 2 < 60) {
-        strcat(eqUsed, " ");
+        strcat(eqUsed, "|");
         strcat(eqUsed, eq);
     }
 }
@@ -106,46 +106,46 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
         if (!kd && kp0 && kpf) {
             d = pf - p0;
             kd = true;
-            addEq(eqUsed, "d=pf-p0");
+            addEq(eqUsed, "d = pf - p0");
         }
         if (!kpf && kp0 && kd) {
             pf = p0 + d;
             kpf = true;
-            addEq(eqUsed, "pf=p0+d");
+            addEq(eqUsed, "pf = p0 + d");
         }
         if (!kp0 && kpf && kd) {
             p0 = pf - d;
             kp0 = true;
-            addEq(eqUsed, "p0=pf-d");
+            addEq(eqUsed, "p0 = pf - d");
         }
         if (!kt && kv0 && kvf && ka && a != 0) {
             t = (vf - v0) / a;
-            if (t >= 0) { kt = true; addEq(eqUsed, "t=(vf-v0)/a"); }
+            if (t >= 0) { kt = true; addEq(eqUsed, "t = (vf - v0) / a"); }
         }
         if (!kvf && kv0 && ka && kt) {
             vf = v0 + a * t;
             kvf = true;
-            addEq(eqUsed, "vf=v0+at");
+            addEq(eqUsed, "vf = v0 + a*t");
         }
         if (!kv0 && kvf && ka && kt) {
             v0 = vf - a * t;
             kv0 = true;
-            addEq(eqUsed, "v0=vf-at");
+            addEq(eqUsed, "v0 = vf - a*t");
         }
         if (!ka && kv0 && kvf && kt && t != 0) {
             a = (vf - v0) / t;
             ka = true;
-            addEq(eqUsed, "a=(vf-v0)/t");
+            addEq(eqUsed, "a = (vf - v0) / t");
         }
         if (!kd && kv0 && kt && ka) {
             d = v0 * t + 0.5f * a * t * t;
             kd = true;
-            addEq(eqUsed, "d=v0t+.5at^2");
+            addEq(eqUsed, "d = v0*t + .5*a*t^2");
         }
         if (!kd && kv0 && kvf && kt) {
             d = (v0 + vf) * 0.5f * t;
             kd = true;
-            addEq(eqUsed, "d=(v0+vf)t/2");
+            addEq(eqUsed, "d = (v0 + vf) * t / 2");
         }
         if (!kt && kv0 && kd && ka) {
             if (a != 0) {
@@ -162,11 +162,11 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                         t = tMin;
                         kt = true;
                     }
-                    if (kt) addEq(eqUsed, "d=v0t+.5at^2");
+                    if (kt) addEq(eqUsed, "d = v0*t + .5*a*t^2");
                 }
             } else if (v0 != 0) {
                 t = d / v0;
-                if (t >= 0) { kt = true; addEq(eqUsed, "t=d/v0"); }
+                if (t >= 0) { kt = true; addEq(eqUsed, "t = d / v0"); }
             }
         }
         if (!kvf && kv0 && ka && kd) {
@@ -176,7 +176,7 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                 if (v0 != 0) vf = (v0 > 0) ? vfMag : -vfMag;
                 else vf = (a * d >= 0) ? vfMag : -vfMag;
                 kvf = true;
-                addEq(eqUsed, "vf^2=v0^2+2ad");
+                addEq(eqUsed, "vf^2 = v0^2 + 2*a*d");
             }
         }
         if (!kv0 && kvf && ka && kd) {
@@ -186,18 +186,18 @@ void trySolve(float* vals, bool* known, bool* userSet, char* eqUsed) {
                 if (vf != 0) v0 = (vf > 0) ? v0Mag : -v0Mag;
                 else v0 = (a * d <= 0) ? v0Mag : -v0Mag;
                 kv0 = true;
-                addEq(eqUsed, "v0^2=vf^2-2ad");
+                addEq(eqUsed, "v0^2 = vf^2 - 2*a*d");
             }
         }
         if (!ka && kv0 && kvf && kd && d != 0) {
             a = (vf * vf - v0 * v0) / (2 * d);
             ka = true;
-            addEq(eqUsed, "a=(vf^2-v0^2)/2d");
+            addEq(eqUsed, "a = (vf^2 - v0^2) / 2*d");
         }
         if (!kd && kv0 && kvf && ka && a != 0) {
             d = (vf * vf - v0 * v0) / (2 * a);
             kd = true;
-            addEq(eqUsed, "d=(vf^2-v0^2)/2a");
+            addEq(eqUsed, "d = (vf^2 - v0^2) / 2*a");
         }
     }
     
@@ -450,13 +450,13 @@ void drawTable() {
     }
     
     gfx_SetTextFGColor(24);
-    char allEqs[128] = "";
+    char allEqs[256] = "";
     if (xEqUsed[0]) strcpy(allEqs, xEqUsed);
     if (yEqUsed[0]) {
         char* tok = yEqUsed;
         while (*tok) {
-            char* end = strchr(tok, ' ');
-            char eq[32];
+            char* end = strchr(tok, '|');
+            char eq[64];
             if (end) {
                 int len = end - tok;
                 strncpy(eq, tok, len);
@@ -467,17 +467,17 @@ void drawTable() {
                 tok += strlen(tok);
             }
             if (strstr(allEqs, eq) == NULL) {
-                if (allEqs[0]) strcat(allEqs, " ");
+                if (allEqs[0]) strcat(allEqs, "|");
                 strcat(allEqs, eq);
             }
         }
     }
-    
+
     int eqY = bottomY;
     char* tok = allEqs;
     while (*tok) {
-        char* end = strchr(tok, ' ');
-        char eq[32];
+        char* end = strchr(tok, '|');
+        char eq[64];
         if (end) {
             int len = end - tok;
             strncpy(eq, tok, len);
@@ -492,11 +492,11 @@ void drawTable() {
     }
     
     gfx_SetTextFGColor(160);
-    gfx_PrintStringXY("Built:" __DATE__ " " __TIME__, 5, 230);
+    gfx_PrintStringXY("Built: " __DATE__ " " __TIME__, 5, 230);
     
-    int miniX = 185;
+    int miniX = 170;
     int miniY = 105;
-    int miniW = 125;
+    int miniW = 140;
     int miniH = 55;
     
     gfx_SetColor(200);
@@ -543,13 +543,12 @@ void drawTable() {
     }
     
     gfx_SetTextFGColor(128);
-    gfx_PrintStringXY("p0: init pos", miniX, miniY + miniH + 3);
-    gfx_PrintStringXY("pf: final pos", miniX, miniY + miniH + 12);
-    gfx_PrintStringXY("v0: init vel", miniX, miniY + miniH + 21);
-    gfx_PrintStringXY("vf: final vel", miniX, miniY + miniH + 30);
-    gfx_PrintStringXY("a: accel   d:disp", miniX, miniY + miniH + 39);
-    gfx_PrintStringXY("t: time    MH: max ht", miniX, miniY + miniH + 48);
-    gfx_PrintStringXY("ToF: time of flight", miniX, miniY + miniH + 57);
+    gfx_PrintStringXY("p0\\pf: init\\final pos (m)", miniX - 27, miniY + miniH + 12);
+    gfx_PrintStringXY("v0\\vf: init\\final vel (m/s)", miniX - 27, miniY + miniH + 21);
+    gfx_PrintStringXY("a: acceleration (m/s^2)", miniX - 27, miniY + miniH + 30);
+    gfx_PrintStringXY("d: displacement (m)", miniX - 27, miniY + miniH + 39);
+    gfx_PrintStringXY("MH: maximum height (m)", miniX - 27, miniY + miniH + 48);
+    gfx_PrintStringXY("ToF: time of flight (s)", miniX - 27, miniY + miniH + 57);
     gfx_PrintStringXY("[graph]", 265, 230);
 }
 
@@ -638,7 +637,7 @@ void drawGraph() {
     gfx_FillCircle(startSx, startSy, 4);
     
     gfx_SetTextFGColor(0);
-    gfx_PrintStringXY("Any key to return", 100, 225);
+    gfx_PrintStringXY("Any key to return", 110, 225);
     
     gfx_BlitBuffer();
     
