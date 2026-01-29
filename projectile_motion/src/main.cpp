@@ -1,3 +1,20 @@
+/*
+ * Projectile Motion Solver for TI-84 Plus CE
+ *
+ * A kinematic equation solver for 2D projectile motion problems.
+ * Supports solving for position, velocity, acceleration, displacement, and time
+ * in both X and Y components, with automatic equation selection and visualization.
+ *
+ * Controls:
+ *   Arrow Keys  - Navigate between cells
+ *   Enter       - Begin editing selected cell
+ *   0-9, ., (-) - Enter numeric values
+ *   Del         - Clear selected cell (or backspace in edit mode)
+ *   Clear       - Cancel edit / Exit program
+ *   Mode        - Reset all values
+ *   Graph       - Show full-screen trajectory plot
+ */
+
 #include <tice.h>
 #include <graphx.h>
 #include <keypadc.h>
@@ -9,13 +26,12 @@
 #define PI 3.14159265f
 #define DEG_TO_RAD (PI / 180.0f)
 #define RAD_TO_DEG (180.0f / PI)
-#define EPSILON 0.01f
 
 #define VAR_COUNT 7
 #define ROWS 7
 #define COLS 2
-#define EXTRA_ROWS 3
 
+/* Kinematic variables: p0, pf, v0, vf, a, d, t for X and Y components */
 float xVals[VAR_COUNT];
 float yVals[VAR_COUNT];
 bool xKnown[VAR_COUNT];
@@ -23,6 +39,7 @@ bool yKnown[VAR_COUNT];
 bool xUserSet[VAR_COUNT];
 bool yUserSet[VAR_COUNT];
 
+/* Launch parameters (magnitude and angle form) */
 float launchSpeed = 0;
 float launchAngle = 0;
 float finalSpeed = 0;
@@ -33,9 +50,9 @@ bool speedUserSet = false;
 bool angleUserSet = false;
 bool finalSpeedUserSet = false;
 
+/* Cursor and input state */
 int curRow = 0;
 int curCol = 0;
-
 char inputBuf[12];
 int inputLen = 0;
 bool inputMode = false;
@@ -44,6 +61,7 @@ bool isNegative = false;
 
 const char* rowLabels[VAR_COUNT] = {"p0", "pf", "v0", "vf", "a", "d", "t"};
 
+/* Equation tracking for display */
 char xEqUsed[64] = "";
 char yEqUsed[64] = "";
 
@@ -864,6 +882,8 @@ int main(void) {
                 if (curRow >= ROWS) {
                     curRow = curRow - ROWS;
                     curCol = 1;
+                } else if (curRow < 3 && curCol == 0) {
+                    curRow = ROWS + curRow;
                 } else {
                     curCol = (curCol - 1 + COLS) % COLS;
                 }
